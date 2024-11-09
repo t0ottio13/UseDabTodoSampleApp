@@ -1,7 +1,102 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+@using System.Text.Json
 
-<h1>Hello, world!</h1>
+<PageTitle>Todo</PageTitle>
 
-Welcome to your new app.
+<h3>Todo</h3>
+
+<input placeholder="Something todo" @bind="@newTodo" />
+<button @onclick="AddTodo">Add todo</button>
+
+@if (todos == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>IsCompleted</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var todo in todos)
+            {
+                <tr>
+                    <td>@todo.Title</td>
+                    <td><input type="checkbox" @bind="@todo.IsCompleted" @bind:event="onchange" @bind:after="() => UpdateTodo(todo.Id)" /></td>
+                    <td><button @onclick="() => DeleteTodo(todo.Id)">Delete</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@inject HttpClient Http
+
+@code {
+    private List<Todo>? todos = new List<Todo>();
+    private string? newTodo;
+
+    private readonly JsonSerializerOptions options = new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Http.GetFromJsonAsync<ListRequest>("/data-api/rest/Todo");
+        if (result != null)
+        {
+            todos = result.Value;
+        }
+    }
+
+    private async Task AddTodo()
+    {
+        if (!string.IsNullOrWhiteSpace(newTodo))
+        {
+            var todo = new  { Title = newTodo };
+
+            var response = await Http.PostAsJsonAsync("/data-api/rest/Todo", todo, options);
+            if (response.IsSuccessStatusCode)
+            {
+                newTodo = "";
+                await OnInitializedAsync();
+            }
+        }
+    }
+
+    private async Task UpdateTodo(int id)
+    {
+        var todo = todos?.FirstOrDefault(t => t.Id == id);
+        if (todo != null)
+        {
+            var updateTodo = new { todo.Title, todo.IsCompleted }; 
+            var response = await Http.PutAsJsonAsync($"/data-api/rest/Todo/Id/{id}", updateTodo, options);
+            if (response.IsSuccessStatusCode)
+            {
+                await OnInitializedAsync();
+            }
+        }
+    }
+
+    private async Task DeleteTodo(int id)
+    {
+        var response = await Http.DeleteAsync($"/data-api/rest/Todo/Id/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            await OnInitializedAsync();
+        }
+    }
+
+    private class ListRequest
+    {
+        public List<Todo> Value { get; set; } = new List<Todo>();
+    }
+}
+
